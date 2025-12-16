@@ -1,0 +1,55 @@
+- hosts: reserver_hosts
+  become: yes
+  vars:
+    app_dir: /opt/reserver
+    service_name: reserver
+    artifact_url: "" # переопределим из Jenkins
+  tasks:
+    - name: Ensure app dir exists
+      file:
+        path: "{{ app_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Download artifact from Nexus
+      get_url:
+        url: "{{ artifact_url }}"
+        dest: "{{ app_dir }}/artifact.tar.gz"
+        mode: "0644"
+
+    - name: Unpack artifact
+      unarchive:
+        src: "{{ app_dir }}/artifact.tar.gz"
+        dest: "{{ app_dir }}"
+        remote_src: yes
+
+    - name: Create systemd unit for reserver
+      copy:
+        dest: /etc/systemd/system/reserver.service
+        content: |
+          [Unit]
+          Description=Reserver Service
+          After=network.target
+
+          [Service]
+          Type=simple
+          ExecStart={{ app_dir }}/bin/reserver -config {{ app_dir }}/src/cmd/reserver/config.yaml
+          Restart=always
+          RestartSec=5
+
+          [Install]
+          WantedBy=multi-user.target
+      notify:
+        - restart reserver
+
+    - name: Enable reserver service
+      systemd:
+        name: reserver
+        enabled: yes
+        state: started
+
+  handlers:
+    - name: restart reserver
+      systemd:
+        name: reserver
+        state: restarted

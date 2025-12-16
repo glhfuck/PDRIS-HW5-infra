@@ -1,0 +1,51 @@
+pipeline {
+    agent any
+
+    options {
+        ansiColor('xterm')
+        timestamps()
+    }
+
+    parameters {
+        string(name: 'BUILD_TAG',
+               defaultValue: '',
+               description: 'Тег артефакта (например, build-15 из билд-пайплайна)')
+    }
+
+    environment {
+        NEXUS_URL  = 'http://host.containers.internal:8081'
+        NEXUS_REPO = 'reserver-artifacts'
+        APP_NAME   = 'reserver'
+    }
+
+    stages {
+        stage('Checkout infra repo') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Prepare Artifact URL') {
+            steps {
+                script {
+                    if (!params.BUILD_TAG?.trim()) {
+                        error "Параметр BUILD_TAG обязателен, например: build-15"
+                    }
+                    env.ARTIFACT_NAME = "${APP_NAME}-${params.BUILD_TAG}.tar.gz"
+                    env.ARTIFACT_URL  = "${NEXUS_URL}/repository/${NEXUS_REPO}/${env.ARTIFACT_NAME}"
+                    echo "Artifact URL: ${env.ARTIFACT_URL}"
+                }
+            }
+        }
+
+        stage('Run Ansible deploy') {
+            steps {
+                sh '''
+                  cd ansible
+                  ansible-playbook -i inventory playbook.yml \
+                    -e "artifact_url=${ARTIFACT_URL}"
+                '''
+            }
+        }
+    }
+}
