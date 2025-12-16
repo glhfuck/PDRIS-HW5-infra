@@ -1,9 +1,8 @@
 - hosts: reserver_hosts
-  become: yes
+
   vars:
-    app_dir: /opt/reserver
-    service_name: reserver
-    artifact_url: "" # переопределим из Jenkins
+    app_dir: /var/jenkins_home/reserver
+    artifact_url: ""
   tasks:
     - name: Ensure app dir exists
       file:
@@ -23,33 +22,11 @@
         dest: "{{ app_dir }}"
         remote_src: yes
 
-    - name: Create systemd unit for reserver
-      copy:
-        dest: /etc/systemd/system/reserver.service
-        content: |
-          [Unit]
-          Description=Reserver Service
-          After=network.target
+    - name: Stop existing reserver process if running
+      shell: "pkill reserver || true"
 
-          [Service]
-          Type=simple
-          ExecStart={{ app_dir }}/bin/reserver -config {{ app_dir }}/src/cmd/reserver/config.yaml
-          Restart=always
-          RestartSec=5
-
-          [Install]
-          WantedBy=multi-user.target
-      notify:
-        - restart reserver
-
-    - name: Enable reserver service
-      systemd:
-        name: reserver
-        enabled: yes
-        state: started
-
-  handlers:
-    - name: restart reserver
-      systemd:
-        name: reserver
-        state: restarted
+    - name: Start reserver in background
+      shell: |
+        nohup {{ app_dir }}/bin/reserver \
+          -config {{ app_dir }}/src/cmd/reserver/config.yaml \
+          > {{ app_dir }}/reserver.log 2>&1 &
